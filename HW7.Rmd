@@ -107,3 +107,6 @@ for (i in 1:length(thetaInit)){
        xlab = expression(paste("ith ", theta)))
 }
 ```
+
+So the estimated values of $\theta$ are
+$$\delta=0.3,\mu_1=10,\mu_2=7,\sigma^2_1=0.25, \sigma^2_2=0.24$$.

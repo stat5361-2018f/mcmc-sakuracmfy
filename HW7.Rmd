@@ -1,0 +1,109 @@
+---
+title: "Normal Mixture Revisited"
+subtitle: "5361 Homework 7"
+author: Qinxiao Shi ^[<qinxiao.shi@uconn.edu>]
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  bookdown::pdf_document2
+documentclass: article
+papersize: letter
+fontsize: 11pt
+bibliography: Format.bib
+biblio-style: asa
+---
+
+# Normal Mixture Revisited
+Consider a normal mixture, prior for $\mu_1,\mu_2 \sim N(0, 10^2)$, and the prior for $1/\sigma^2_1, 1/\sigma^2_2 \sim \Gamma(0.5, 10)$. Further, all the priors are independent.
+
+First, the mixture normal distribution is 
+$$f(x)=\delta N(\mu_1, \sigma^2_1)+(1-\delta)N(\mu_2, \sigma^2_2)$$
+Since $\frac{1}{\sigma^2_1}, \frac{1}{\sigma^2_2}\sim \Gamma(0.5, 10)$, $\sigma^2_1, \sigma^2_2 \sim \text{Inv-Gamma(0.5, 10)}$.
+So the posterior density is
+$$\pi (\theta|\mathbf{x})\propto \prod_{i=1}^{n}f(x_i)
+\times\frac{1}{\Gamma(0.5)10^{0.5}}(\frac{1}{\sigma^2_1})^{1.5}e^{-\frac{1}{10\sigma^2_1}}
+\times\frac{1}{\Gamma(0.5)10^{0.5}}(\frac{1}{\sigma^2_2})^{1.5}e^{-\frac{1}{10\sigma^2_2}}
+\times\frac{1}{10\sqrt{2\pi}}e^{-\frac{\mu_1^2}{2\times 10^2}}
+\times\frac{1}{10\sqrt{2\pi}}e^{-\frac{\mu_2^2}{2\times 10^2}}$$
+where $\theta=(\delta, \mu_1, \mu_2, \sigma^2_1, \sigma^2_2)$.
+
+```{r, NM, echo = TRUE}
+library('invgamma')
+library('HI')
+delta <- 0.7
+n <- 100
+set.seed(123)
+u <- rbinom(n, prob = delta, size = 1)
+x <- rnorm(n, ifelse(u == 1, 7, 10), 0.5)
+
+logll <- function(theta, x){
+  delta <- theta[1]
+  mu1 <- theta[2]
+  mu2 <- theta[3]
+  sg1 <- theta[4]
+  sg2 <- theta[5]
+  
+  sum(log(delta*dnorm(x, mu1, sg1^0.5)+(1-delta)*dnorm(x, mu2, sg2^0.5)))
+}
+
+loglr <- function(theta){
+  delta <- theta[1]
+  mu1 <- theta[2]
+  mu2 <- theta[3]
+  sg1 <- theta[4]
+  sg2 <- theta[5]
+  
+  return(dnorm(mu1, 0, 10, log = T)+dnorm(mu2, 0, 10, log = T)+
+        dinvgamma(sg1, shape = 0.5, scale = 10, log = T)+dinvgamma(sg2, shape = 0.5, scale = 10, log = T)
+  )
+  }
+
+logpost <- function(theta, x) {
+  delta <- theta[1]
+  mu1 <- theta[2]
+  mu2 <- theta[3]
+  sg1 <- theta[4]
+  sg2 <- theta[5]
+  
+  return(logll(theta, x)+loglr(theta))
+}
+
+mymcmc <- function(niter, thetaInit, x, nburn= 100) {
+  p <- length(thetaInit)
+  thetaCurrent <- thetaInit
+  logFC <- function(th, idx) {
+    theta <- thetaCurrent
+    theta[idx] <- th
+    logpost(theta, x)
+  }
+  out <- matrix(thetaInit, niter, p, byrow = TRUE)
+  ## Gibbs sampling
+  for (i in 2:niter) {
+    for (j in 1:p) {
+    if (j == 1 | j == 4 | j == 5){
+      out[i, j] <- thetaCurrent[j] <-
+        HI::arms(thetaCurrent[j], logFC,
+                 function(x, idx) ((x > 0) * (x < 1)), 
+                 1, idx = j)
+    } else if (j == 2 | j == 3) {
+      out[i, j] <- thetaCurrent[j] <-
+        HI::arms(thetaCurrent[j], logFC,
+                 function(x, idx) ((x > -50) * (x < 50)), 
+                 1, idx = j)
+    } 
+    }
+  }
+  out[-(1:nburn), ]
+}
+
+niter <- 3000
+nburn <- 1000
+thetaInit <- c(0.3, 10, 7, 0.25, 0.24)
+sim <- mymcmc(niter, thetaInit, x)
+
+par(mfrow = c(1,2))
+for (i in 1:length(thetaInit)){
+  plot(ts(sim[,i]))
+  hist(sim[,i], main = expression(paste("Histogram of ith ", theta)),
+       xlab = expression(paste("ith ", theta)))
+}
+```
